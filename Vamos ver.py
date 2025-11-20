@@ -1,22 +1,17 @@
 # REINICIO.py
-# Football Studio Card Analyzer - Profissional (Completo)
-# - Inserção por grade de cartas (sem selects)
-# - Mantém e estende seu BKM
-# - Detecta brechas, prevê múltiplos caminhos, calcula nível 1-9
-# - Export, desfazer, destaque etc.
-#
+# Football Studio Card Analyzer - Versão Completa (Vertical history + botões autônomos)
 # Execute: streamlit run REINICIO.py
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from typing import Dict, List
+from typing import List, Dict
 
-# ----------------------------- Config -----------------------------
+# ----------------------------- Configuração -----------------------------
 st.set_page_config(page_title="Football Studio Analyzer - Completo", layout="wide", initial_sidebar_state="expanded")
-st.title("Football Studio Analyzer — Versão Completa")
-st.markdown("Inserção por cartas (grade), análise multi-caminho, detecção de brechas e nível de manipulação (1–9).")
+st.title("Football Studio Analyzer — Completo (Vertical, Botões Autônomos)")
+st.markdown("Histórico vertical • clique em carta insere imediatamente • BKM preservado: análise, níveis 1–9, detecção de brechas, previsões multi-caminho e stake sugerido.")
 
 # ----------------------------- Constantes -----------------------------
 CARD_MAP = {
@@ -25,7 +20,6 @@ CARD_MAP = {
     '5': 5, '4': 4, '3': 3, '2': 2
 }
 CARD_ORDER = ['A','K','Q','J','10','9','8','7','6','5','4','3','2']
-
 HIGH = {'A','K','Q','J'}
 MEDIUM = {'10','9','8'}
 LOW = {'7','6','5','4','3','2'}
@@ -34,7 +28,7 @@ MAX_COLS = 9
 MAX_LINES = 10
 MAX_DISPLAY = MAX_COLS * MAX_LINES
 
-# ----------------------------- Utilitários BKM (mantidos e expandidos) -----------------------------
+# ----------------------------- Utilitários (BKM preserved) -----------------------------
 def card_value(card_label: str) -> int:
     return CARD_MAP.get(str(card_label), 0)
 
@@ -62,7 +56,6 @@ def determine_winner(v_blue: int, v_red: int) -> str:
         return 'tie'
     return 'blue' if v_blue > v_red else 'red'
 
-# Padrões (preservados e ajustáveis)
 def pattern_of_sequence(history: pd.DataFrame) -> str:
     if history.empty:
         return 'indefinido'
@@ -82,23 +75,21 @@ def pattern_of_sequence(history: pd.DataFrame) -> str:
             return 'quebra controlada'
     return 'indefinido'
 
-# Heurística de análise principal (preservando sua base)
 def analyze_tendency(history: pd.DataFrame) -> dict:
     if history.empty:
-        return {'pattern': 'indefinido','prob_red': 0.0,'prob_blue': 0.0,'prob_tie': 0.0,'suggestion':'aguardar','confidence':0.0}
+        return {'pattern':'indefinido','prob_red':0.0,'prob_blue':0.0,'prob_tie':0.0,'suggestion':'aguardar','confidence':0.0}
     last = history.iloc[-1]
     pattern = pattern_of_sequence(history)
     prob = {'red':0.0,'blue':0.0,'tie':0.0}
     confidence = 0.0
     last_strength = last.get('strength','indefinido')
     last_winner = last['winner']
-    # base
     if last_strength == 'forte':
         repeat_prob = 0.78; other_prob = 1 - repeat_prob
         if last_winner == 'red':
-            prob['red'] = repeat_prob; prob['blue'] = other_prob*0.95
+            prob['red'] = repeat_prob; prob['blue'] = other_prob * 0.95
         elif last_winner == 'blue':
-            prob['blue'] = repeat_prob; prob['red'] = other_prob*0.95
+            prob['blue'] = repeat_prob; prob['red'] = other_prob * 0.95
         else:
             prob['tie'] = 0.7; prob['red'] = 0.15; prob['blue'] = 0.15
         confidence = 0.78
@@ -122,7 +113,8 @@ def analyze_tendency(history: pd.DataFrame) -> dict:
         confidence = 0.72
     else:
         prob = {'red':0.49,'blue':0.49,'tie':0.02}; confidence = 0.4
-    # ajustes por padrão
+
+    # ajustes por padrão detectado
     if pattern == 'repetição':
         if last_winner == 'red': prob['red'] = min(0.97, prob['red'] + 0.12)
         elif last_winner == 'blue': prob['blue'] = min(0.97, prob['blue'] + 0.12)
@@ -143,17 +135,18 @@ def analyze_tendency(history: pd.DataFrame) -> dict:
         if last_winner == 'red': prob['red'] = max(prob['red'], 0.62)
         else: prob['blue'] = max(prob['blue'], 0.62)
         confidence = max(confidence, 0.68)
-    # ties recentes
+
     recent_ties = history['winner'].tail(4).tolist().count('tie')
     if recent_ties >= 1:
         confidence = min(0.85, confidence * 0.9)
-        prob['tie'] = max(prob.get('tie',0.03), 0.03 + recent_ties*0.02)
-    # normaliza
+        prob['tie'] = max(prob.get('tie',0.03), 0.03 + recent_ties * 0.02)
+
     total = prob['red'] + prob['blue'] + prob.get('tie',0.0)
     if total <= 0:
         prob = {'red':0.49,'blue':0.49,'tie':0.02}; total = 1.0
     for k in prob: prob[k] = prob[k] / total
     prob_pct = {k: round(v*100,1) for k,v in prob.items()}
+
     sorted_probs = sorted(prob_pct.items(), key=lambda x: x[1], reverse=True)
     top_label, top_val = sorted_probs[0]
     suggestion = 'aguardar'
@@ -161,9 +154,9 @@ def analyze_tendency(history: pd.DataFrame) -> dict:
         if top_label == 'red': suggestion = 'apostar RED (🔴)'
         elif top_label == 'blue': suggestion = 'apostar BLUE (🔵)'
         else: suggestion = 'apostar TIE (🟡)'
+
     return {'pattern':pattern,'prob_red':prob_pct['red'],'prob_blue':prob_pct['blue'],'prob_tie':prob_pct['tie'],'suggestion':suggestion,'confidence':round(confidence*100,1)}
 
-# Manipulation level (ampliado)
 def manipulation_level(history: pd.DataFrame) -> int:
     if history.empty:
         return 1
@@ -172,7 +165,6 @@ def manipulation_level(history: pd.DataFrame) -> int:
     winners = history['winner'].tolist()
     strengths = history['strength'].tolist()
     score = 0.0
-    # runs fracas
     weak_runs = 0; run = 0
     for s in strengths:
         if s == 'fraco': run += 1
@@ -181,11 +173,9 @@ def manipulation_level(history: pd.DataFrame) -> int:
             run = 0
     if run >= 2: weak_runs += 1
     score += weak_runs * 1.6
-    # alternações
     alternations = sum(1 for i in range(1, len(winners)) if winners[i] != winners[i-1] and winners[i] != 'tie' and winners[i-1] != 'tie')
     alternation_rate = alternations / max(1, (len(winners)-1))
     score += alternation_rate * 3.4
-    # vitórias por baixas
     low_win_count = 0
     for idx, w in enumerate(winners):
         if w == 'red':
@@ -196,22 +186,18 @@ def manipulation_level(history: pd.DataFrame) -> int:
                 low_win_count += 1
     low_rate = low_win_count / max(1, len(winners))
     score += low_rate * 3.2
-    # ties reduzem
     tie_rate = winners.count('tie') / max(1, len(winners))
     score -= tie_rate * 1.6
-    # muitas cartas altas reduzem suspeita
     high_count = sum(1 for i in range(len(vals_blue)) if vals_blue[i] >= 11 or vals_red[i] >= 11)
     high_rate = high_count / max(1, len(vals_blue))
     score -= high_rate * 2.2
     level = int(min(9, max(1, round(score))))
     return level
 
-# Breach detection (heurísticas)
 def detect_breaches(history: pd.DataFrame) -> List[Dict]:
     flags = []
     if history.empty:
         return flags
-    # 1) sequência de vitórias por cartas baixas
     low_wins = 0
     for idx in range(len(history)):
         row = history.iloc[idx]
@@ -230,15 +216,13 @@ def detect_breaches(history: pd.DataFrame) -> List[Dict]:
         if low_wins >= 3:
             flags.append({'type':'low_win_streak','index':idx,'desc':'3+ vitórias consecutivas por cartas baixas'})
             break
-    # 2) carta baixa vencendo carta alta (suspeita)
     for idx in range(len(history)):
         row = history.iloc[idx]
         vb = row.get('value_blue',0); vr = row.get('value_red',0)
         if row['winner'] == 'red' and classify_card(row['red_card']) == 'baixa' and vb >= 11:
-            flags.append({'type':'low_beat_high','index':idx,'desc':'Carta baixa venceu carta alta (RED venceu uma carta alta BLUE)'})
+            flags.append({'type':'low_beat_high','index':idx,'desc':'Carta baixa venceu carta alta (RED)'} )
         if row['winner'] == 'blue' and classify_card(row['blue_card']) == 'baixa' and vr >= 11:
-            flags.append({'type':'low_beat_high','index':idx,'desc':'Carta baixa venceu carta alta (BLUE venceu uma carta alta RED)'})
-    # 3) alternância perfeita (ABAB) repetida -> possível manipulação
+            flags.append({'type':'low_beat_high','index':idx,'desc':'Carta baixa venceu carta alta (BLUE)'} )
     winners = history['winner'].tolist()
     for i in range(len(winners)-3):
         seq = winners[i:i+4]
@@ -247,15 +231,10 @@ def detect_breaches(history: pd.DataFrame) -> List[Dict]:
             break
     return flags
 
-# Stake suggestion (conservador)
 def stake_suggestion(confidence_pct: float, manipulation_lvl: int) -> float:
-    # retorna porcentagem do bankroll sugerida (conservador)
-    # confiança 0-100; maniplevel 1-9
-    base = max(0.5, min(5.0, confidence_pct / 20.0))  # 0.5% a 5% pela confiança
-    # penalizar stake se manipulação alta
-    penalty = 1.0 - ((manipulation_lvl - 1) / 12.0)  # nível 9 reduz stake ~ 66%
+    base = max(0.5, min(5.0, confidence_pct / 20.0))
+    penalty = 1.0 - ((manipulation_lvl - 1) / 12.0)
     stake = base * penalty
-    # garantir mínimo e máximo
     stake = round(max(0.25, min(5.0, stake)), 2)
     return stake
 
@@ -267,19 +246,17 @@ if 'history' not in st.session_state:
         'winner','diff','strength'
     ])
 
-# UI state
-if 'ui_mobile' not in st.session_state:
-    st.session_state.ui_mobile = False
-if 'record_tie_cards' not in st.session_state:
-    st.session_state.record_tie_cards = True
+# UI state: store last selections to support autonomous click-insert logic
+if 'sel_blue' not in st.session_state: st.session_state.sel_blue = None
+if 'sel_red' not in st.session_state: st.session_state.sel_red = None
+if 'ui_mobile' not in st.session_state: st.session_state.ui_mobile = False
+if 'record_tie_cards' not in st.session_state: st.session_state.record_tie_cards = True
 
 # ----------------------------- Funções de manipulação -----------------------------
 def add_round(blue_card: str, red_card: str):
     now = datetime.now()
-    vb = card_value(blue_card)
-    vr = card_value(red_card)
-    vc_blue = classify_card(blue_card)
-    vc_red = classify_card(red_card)
+    vb = card_value(blue_card); vr = card_value(red_card)
+    vc_blue = classify_card(blue_card); vc_red = classify_card(red_card)
     winner = determine_winner(vb, vr)
     diff = abs(vb - vr)
     strength = strength_of_duel(vb, vr)
@@ -340,28 +317,18 @@ with st.sidebar:
     st.write('---')
     csv = st.session_state.history.to_csv(index=False)
     st.download_button("Exportar histórico (CSV)", data=csv, file_name='history_football_studio.csv')
-    if st.button("Exportar relatório (TXT)"):
-        # gerar relatório simples
-        txt = "Football Studio Analyzer - Relatório\n"
-        txt += f"Gerado em: {datetime.now()}\n\n"
-        if not st.session_state.history.empty:
-            txt += st.session_state.history.tail(50).to_string(index=False)
-        else:
-            txt += "Sem dados.\n"
-        st.download_button("Download TXT", data=txt, file_name='relatorio_football_studio.txt')
     st.write('---')
     st.session_state.ui_mobile = st.checkbox("Modo Mobile (botões maiores)", value=st.session_state.ui_mobile)
     st.session_state.record_tie_cards = st.checkbox("Registrar cartas no TIE (se selecionadas)", value=st.session_state.record_tie_cards)
     st.write('---')
-    st.caption("Clique na carta e depois no botão da cor para gravar (ou use os botões rápidos de inserção).")
+    st.caption("Clique numa carta BLUE ou RED para inserir imediatamente (usa a carta oposta selecionada, se houver). Ou clique em 'Inserir TIE' para empate.")
 
 # ----------------------------- Inserção por grade (sem selects) -----------------------------
-st.subheader("Inserir Resultados — Grade de Cartas (sem selects)")
+st.subheader("Inserir Resultados — Grade de Cartas (clique insere imediatamente)")
 
-# estilo de botões maior via CSS
 big_btn = """
 <style>
-div.stButton > button { height:58px; font-size:16px; }
+div.stButton > button { height:56px; font-size:15px; }
 </style>
 """
 big_btn_mobile = """
@@ -371,195 +338,132 @@ div.stButton > button { height:84px; font-size:20px; }
 """
 st.markdown(big_btn_mobile if st.session_state.ui_mobile else big_btn, unsafe_allow_html=True)
 
-# área: escolhe carta e registra com cor
-col_blue_area, col_middle_area, col_red_area = st.columns([4,1,4])
+# Layout: blue grid left, red grid right, tie quick insert middle
+col_blue, col_mid, col_red = st.columns([4,1,4])
 
-with col_blue_area:
-    st.markdown("**🔵 Escolha a carta BLUE (clique na carta, depois em 'Inserir BLUE')**")
-    ccols = st.columns(7)
-    # armazenar seleção localmente em session_state
-    if 'sel_blue' not in st.session_state:
-        st.session_state.sel_blue = None
+with col_blue:
+    st.markdown("**🔵 BLUE — clique para inserir (usa RED selecionada se houver)**")
+    blue_cols = st.columns(7)
     for i, c in enumerate(CARD_ORDER):
-        if ccols[i%7].button(c, key=f"b_{c}"):
+        if blue_cols[i % 7].button(c, key=f"btn_b_{c}"):
+            # clicking a blue card inserts immediately using sel_red if exists, else default '2'
+            sel_red = st.session_state.sel_red if st.session_state.sel_red else '2'
+            # set sel_blue for context
             st.session_state.sel_blue = c
-    st.write(f"Selecionada BLUE: **{st.session_state.sel_blue or '-'}**")
-    if st.button("🔵 Inserir BLUE (usa RED selecionada se houver)", key="insert_blue_btn"):
-        sel_red = st.session_state.get('sel_red', CARD_ORDER[0])
-        if not st.session_state.sel_blue:
-            st.warning("Selecione a carta BLUE antes de inserir.")
-        else:
-            add_round(st.session_state.sel_blue, sel_red)
+            add_round(c, sel_red)
+            st.experimental_rerun()
 
-with col_middle_area:
+with col_mid:
     st.markdown(" ")
-    st.write(" ")
-    # botão Tie rápido (opcionalmente grava cartas selecionadas)
-    if st.button("🟡 Inserir TIE (opcional cartas selecionadas)", key="insert_tie_btn"):
-        add_round_tie(st.session_state.get('sel_blue', None), st.session_state.get('sel_red', None))
+    if st.button("🟡 Inserir TIE (opcional cartas)"):
+        add_round_tie(st.session_state.sel_blue if st.session_state.sel_blue else None, st.session_state.sel_red if st.session_state.sel_red else None)
+        st.experimental_rerun()
+    st.markdown(" ")
+    st.write("Últas seleções:")
+    st.write(f"BLUE selecionada: **{st.session_state.sel_blue or '-'}**")
+    st.write(f"RED selecionada: **{st.session_state.sel_red or '-'}**")
 
-with col_red_area:
-    st.markdown("**🔴 Escolha a carta RED (clique na carta, depois em 'Inserir RED')**")
-    rcols = st.columns(7)
-    if 'sel_red' not in st.session_state:
-        st.session_state.sel_red = None
+with col_red:
+    st.markdown("**🔴 RED — clique para inserir (usa BLUE selecionada if houver)**")
+    red_cols = st.columns(7)
     for i, c in enumerate(CARD_ORDER):
-        if rcols[i%7].button(c, key=f"r_{c}"):
+        if red_cols[i % 7].button(c, key=f"btn_r_{c}"):
+            sel_blue = st.session_state.sel_blue if st.session_state.sel_blue else '2'
             st.session_state.sel_red = c
-    st.write(f"Selecionada RED: **{st.session_state.sel_red or '-'}**")
-    if st.button("🔴 Inserir RED (usa BLUE selecionada se houver)", key="insert_red_btn"):
-        sel_blue = st.session_state.get('sel_blue', CARD_ORDER[0])
-        if not st.session_state.sel_red:
-            st.warning("Selecione a carta RED antes de inserir.")
-        else:
-            add_round(sel_blue, st.session_state.sel_red)
+            add_round(sel_blue, c)
+            st.experimental_rerun()
 
 st.write("---")
 
-# ----------------------------- Histórico visual (9x10) -----------------------------
-st.subheader("Histórico — Visual 9×10 (últimos resultados)")
+# ----------------------------- Histórico vertical -----------------------------
+st.subheader("Histórico (vertical — mais recente no topo)")
 
-history = st.session_state.history.copy()
-total_len = len(st.session_state.history)
-
-if total_len == 0:
+if st.session_state.history.empty:
     st.info("Nenhum resultado inserido ainda.")
 else:
-    # limitar para visual
-    hist_vis = history.tail(MAX_DISPLAY).reset_index(drop=True)
-    rows = [hist_vis.iloc[i:i+MAX_COLS] for i in range(0, len(hist_vis), MAX_COLS)]
-    # destaque último 3 (global index)
-    for r_idx, row_df in enumerate(rows):
-        cols = st.columns(MAX_COLS)
-        for c_idx in range(MAX_COLS):
-            with cols[c_idx]:
-                idx = r_idx*MAX_COLS + c_idx
-                if idx < len(row_df):
-                    item = row_df.iloc[idx]
-                    # label
-                    if item['winner'] == 'red':
-                        label = f"🔴 {item['red_card']} vs {item['blue_card']}\n({item['strength']})"
-                    elif item['winner'] == 'blue':
-                        label = f"🔵 {item['blue_card']} vs {item['red_card']}\n({item['strength']})"
-                    else:
-                        label = f"🟡 TIE {item['blue_card']}|{item['red_card']}\n({item['strength']})"
-                    # compute global index in history
-                    global_idx = total_len - len(hist_vis) + idx
-                    highlight = (global_idx >= total_len - 3)
-                    if highlight:
-                        st.markdown(f"<div style='background:#fff7a8;border-radius:6px;padding:6px'><b>{label}</b></div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"<div style='padding:4px'>{label}</div>", unsafe_allow_html=True)
-                else:
-                    st.write("")
+    # show latest first (vertical)
+    df_vert = st.session_state.history.copy().iloc[::-1].reset_index(drop=True)
+    st.dataframe(df_vert, use_container_width=True, height=480)
 
-st.write("---")
-
-# ----------------------------- Análise principal + multi-caminho -----------------------------
-st.subheader("Análise, Previsões Multi-Caminho e Detecção de Brechas")
+# ----------------------------- Análise, multi-caminho e brechas -----------------------------
+st.subheader("Análise e Previsões (multi-caminho)")
 
 analysis = analyze_tendency(st.session_state.history)
 level = manipulation_level(st.session_state.history)
 breaches = detect_breaches(st.session_state.history)
 
-# cenário atual
-st.markdown("### Situação Atual")
 st.markdown(f"**Padrão detectado:** {analysis['pattern'].capitalize()}")
-st.markdown(f"**Probabilidades (heur.):** RED {analysis['prob_red']}% • BLUE {analysis['prob_blue']}% • TIE {analysis['prob_tie']}%")
+st.markdown(f"**Probabilidades (heur):** RED {analysis['prob_red']}% • BLUE {analysis['prob_blue']}% • TIE {analysis['prob_tie']}%")
 st.markdown(f"**Sugestão:** {analysis['suggestion']}")
 st.markdown(f"**Confiança:** {analysis['confidence']}%")
 st.markdown(f"**Nível de manipulação (1–9):** {level}")
 stake_pct = stake_suggestion(analysis['confidence'], level)
-st.markdown(f"**Stake sugerido (conservador):** {stake_pct}% do bankroll (ex.: se R$100 -> R${round(100*stake_pct/100,2)})")
-st.caption("Sugestão conservadora — ajuste conforme sua gestão de banca. Aposte com responsabilidade.")
+st.markdown(f"**Stake sugerido (conservador):** {stake_pct}% do bankroll")
 
-# multi-caminho: simular próxima rodada sendo RED, BLUE, TIE e recalcular análise condicional
-st.markdown("### Previsões Condicionais (se o próximo for RED / BLUE / TIE) — Multi-caminho")
-def simulate_next_and_analyze(history_df: pd.DataFrame, next_winner: str, next_blue_card=None, next_red_card=None):
-    # cria cópia e adiciona hipotético
+# simulate next scenarios if there is at least 1 round
+def simulate_next_and_analyze(history_df: pd.DataFrame, next_winner: str):
     h = history_df.copy()
-    if next_winner == 'red':
-        bc = next_blue_card if next_blue_card else h.iloc[-1]['blue_card'] if not h.empty else CARD_ORDER[0]
-        rc = next_red_card if next_red_card else CARD_ORDER[0]
-        vb = card_value(bc); vr = card_value(rc)
-        winner = 'red'
-    elif next_winner == 'blue':
-        bc = next_blue_card if next_blue_card else CARD_ORDER[0]
-        rc = next_red_card if next_red_card else h.iloc[-1]['red_card'] if not h.empty else CARD_ORDER[0]
-        vb = card_value(bc); vr = card_value(rc)
-        winner = 'blue'
+    if h.empty:
+        # fallback default cards
+        bc = '2'; rc = '2'
     else:
-        # tie
-        bc = next_blue_card if next_blue_card else (h.iloc[-1]['blue_card'] if not h.empty else CARD_ORDER[0])
-        rc = next_red_card if next_red_card else (h.iloc[-1]['red_card'] if not h.empty else CARD_ORDER[0])
-        vb = card_value(bc); vr = card_value(rc)
-        winner = 'tie'
-    # compute fields
-    strength = strength_of_duel(vb, vr)
-    new_row = {
-        'timestamp': datetime.now(),
-        'blue_card': bc,
-        'value_blue': vb,
-        'value_class_blue': classify_card(bc),
-        'red_card': rc,
-        'value_red': vr,
-        'value_class_red': classify_card(rc),
-        'winner': winner,
-        'diff': abs(vb-vr),
-        'strength': strength
-    }
-    h = pd.concat([h, pd.DataFrame([new_row])], ignore_index=True)
-    return analyze_tendency(h), manipulation_level(h)
-
-# compute scenarios
-if not st.session_state.history.empty:
-    scen_red = simulate_next_and_analyze(st.session_state.history, 'red')
-    scen_blue = simulate_next_and_analyze(st.session_state.history, 'blue')
-    scen_tie = simulate_next_and_analyze(st.session_state.history, 'tie')
-    cols = st.columns(3)
-    with cols[0]:
-        st.markdown("**Se próximo = RED**")
-        st.write(f"Prob RED {scen_red[0]['prob_red']}% • Suggest: {scen_red[0]['suggestion']} • Conf: {scen_red[0]['confidence']}%")
-        st.write(f"Manip lvl (após) : {scen_red[1]}")
-    with cols[1]:
-        st.markdown("**Se próximo = BLUE**")
-        st.write(f"Prob BLUE {scen_blue[0]['prob_blue']}% • Suggest: {scen_blue[0]['suggestion']} • Conf: {scen_blue[0]['confidence']}%")
-        st.write(f"Manip lvl (após) : {scen_blue[1]}")
-    with cols[2]:
-        st.markdown("**Se próximo = TIE**")
-        st.write(f"Prob TIE {scen_tie[0]['prob_tie']}% • Suggest: {scen_tie[0]['suggestion']} • Conf: {scen_tie[0]['confidence']}%")
-        st.write(f"Manip lvl (após) : {scen_tie[1]}")
-else:
-    st.info("Insira ao menos 1 rodada para ver previsões condicionais.")
-
-# Breaches
-st.markdown("### Brechas / Sinais de Suspeita detectados")
-if breaches:
-    for b in breaches:
-        st.warning(f"[{b['type']}] índice {b['index']}: {b['desc']}")
-else:
-    st.success("Nenhuma brecha importante detectada nas heurísticas atuais.")
-
-st.write("---")
-
-# ----------------------------- Últimas jogadas e tabela detalhada -----------------------------
-st.subheader("Últimas 10 jogadas (detalhado)")
-if st.session_state.history.empty:
-    st.info("Sem dados.")
-else:
-    st.dataframe(st.session_state.history.tail(10).reset_index(drop=True), use_container_width=True)
-
-# ----------------------------- Interpretação e instruções operacionais -----------------------------
-st.subheader("Interpretação (resumo operacional)")
-st.markdown("""
-- Registre **sempre as 2 cartas** (BLUE e RED) para cada rodada; o sistema usa ambas para calcular força e padrões.
-- Diferença ≤2 => rodada **fraca** (alto risco de quebra).  
-- Diferença 3–4 => rodada **média**.  
-- Diferença ≥5 => rodada **forte** (tende a repetir o vencedor).
-- **Nível de manipulação (1–9)**: quanto maior, maior a suspeita de padrões artificiais — reduza stake.
-- Use a **Stake sugerida** como referência conservadora, não instrução absoluta.
-""")
-
-st.caption("Este software aplica heurísticas. Não existe garantia de lucro. Aposte com responsabilidade.")
-
-# ----------------------------- EOF -----------------------------
+        bc = h.iloc[-1]['blue_card'] if 'blue_card' in h.columns and not pd.isna(h.iloc[-1]['blue_card']) else '2'
+        rc = h.iloc[-1]['red_card'] if 'red_card' in h.columns and not pd.isna(h.iloc[-1]['red_card']) else '2'
+    if next_winner == 'red':
+        # simulate red wins by making red higher by 1 (if possible)
+        rc_sim = rc
+        bc_sim = bc
+        # ensure red > blue
+        if card_value(rc_sim) <= card_value(bc_sim):
+            # try to pick next higher from CARD_ORDER
+            for c in CARD_ORDER[::-1]:
+                if card_value(c) > card_value(bc_sim):
+                    rc_sim = c
+                    break
+        # create entry
+        vb = card_value(bc_sim); vr = card_value(rc_sim)
+        new_row = {
+            'timestamp': datetime.now(),
+            'blue_card': bc_sim,
+            'value_blue': vb,
+            'value_class_blue': classify_card(bc_sim),
+            'red_card': rc_sim,
+            'value_red': vr,
+            'value_class_red': classify_card(rc_sim),
+            'winner': 'red',
+            'diff': abs(vb-vr),
+            'strength': strength_of_duel(vb, vr)
+        }
+    elif next_winner == 'blue':
+        bc_sim = bc; rc_sim = rc
+        if card_value(bc_sim) <= card_value(rc_sim):
+            for c in CARD_ORDER[::-1]:
+                if card_value(c) > card_value(rc_sim):
+                    bc_sim = c
+                    break
+        vb = card_value(bc_sim); vr = card_value(rc_sim)
+        new_row = {
+            'timestamp': datetime.now(),
+            'blue_card': bc_sim,
+            'value_blue': vb,
+            'value_class_blue': classify_card(bc_sim),
+            'red_card': rc_sim,
+            'value_red': vr,
+            'value_class_red': classify_card(rc_sim),
+            'winner': 'blue',
+            'diff': abs(vb-vr),
+            'strength': strength_of_duel(vb, vr)
+        }
+    else:
+        # tie simulation: make same card values
+        bc_sim = bc; rc_sim = bc
+        vb = card_value(bc_sim); vr = card_value(rc_sim)
+        new_row = {
+            'timestamp': datetime.now(),
+            'blue_card': bc_sim,
+            'value_blue': vb,
+            'value_class_blue': classify_card(bc_sim),
+            'red_card': rc_sim,
+            'value_red': vr,
+            'value_class_red': classify_card(rc_sim),
+         
